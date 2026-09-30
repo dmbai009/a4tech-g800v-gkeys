@@ -158,17 +158,22 @@ def main():
     stop_event = kernel32.CreateEventW(None, True, False, STOP_EVENT_NAME)
     kernel32.ResetEvent(stop_event)
     while not stop_requested(stop_event):
-        h = open_device()
+        try:
+            # opening can fail while the keyboard is being re-plugged
+            h = open_device()
+        except OSError as e:
+            log(f"can't open keyboard ({e}), retrying...")
+            h = None
         if not h:
             log("keyboard not found, waiting...")
-            kernel32.WaitForSingleObject(stop_event, 3000)
+            kernel32.WaitForSingleObject(stop_event, 1000)
             continue
         log("listening for G-keys. Ctrl+C to quit.")
         try:
             run(h, stop_event)
-        except OSError:
-            log("keyboard disconnected, reconnecting...")
-            time.sleep(1)
+        except Exception as e:  # never die: reconnect on any read error
+            log(f"keyboard disconnected ({e}), reconnecting...")
+            kernel32.WaitForSingleObject(stop_event, 1000)
         finally:
             h.close()
 
