@@ -124,3 +124,7 @@ python sniff.py 30
 Report format on page `0xFFA0`: `04 xx xx b3 b4 00 00 00 80`, where `b3` bits
 0–7 are G1–G8 and `b4` bits 0–7 are G9–G16. Bytes 1–2 change when bindings are
 edited in the A4Tech app.
+
+## License
+
+[MIT](LICENSE)
