@@ -25,7 +25,38 @@ Russian/English layouts but are seen by apps and games as distinct keys.
 Change the `MAPPING` dict at the top of `gkeys.py` to use other keys or
 combinations (e.g. `["CTRL", "F13"]`).
 
-## Requirements
+## Standalone exe (easiest)
+
+`gkeys.exe` needs no Python and no admin rights.
+
+1. Remove any bindings from the G-keys in the A4Tech app.
+2. Double-click `gkeys.exe`. It copies itself to
+   `%LOCALAPPDATA%\Programs\A4Tech G-keys\`, adds itself to autostart
+   (`HKCU\...\Run`), registers in **Settings → Apps** and starts in the background.
+
+To uninstall, either uninstall **A4Tech G-keys** in Settings → Apps, or run
+`gkeys.exe` again and choose **Yes**. Choosing **No** there reinstalls, e.g. to
+update to a newer exe. Uninstalling stops the background process and removes
+the autostart entry, the Apps entry and the installed files.
+
+Command line: `gkeys.exe --install | --uninstall | --run [--quiet]`
+(`--quiet` suppresses dialogs).
+
+Windows SmartScreen / Defender may warn about an unsigned exe: click
+**More info → Run anyway**.
+
+### Building the exe
+
+```
+pip install -r requirements.txt pyinstaller
+pyinstaller --onefile --noconsole --name gkeys app.py
+```
+
+The result is `dist\gkeys.exe`.
+
+## Running from source
+
+### Requirements
 
 - Windows
 - Python 3.8+
@@ -35,7 +66,7 @@ Remove any bindings from the G-keys in the A4Tech app, otherwise each press
 will trigger both the old binding and the new key. (The vendor reports are sent
 either way.)
 
-## Running
+### Running
 
 With a console window and a log of every press:
 
@@ -51,7 +82,7 @@ pythonw gkeys.py
 
 To stop the background instance, end the `pythonw.exe` process in Task Manager.
 
-## Autostart
+### Autostart
 
 Create a shortcut in the Startup folder that launches the script with `pythonw`
 (run in PowerShell from the repository folder):
@@ -68,7 +99,7 @@ $lnk.Save()
 To remove autostart, delete `A4Tech G-keys.lnk` from the Startup folder
 (`Win+R` → `shell:startup`).
 
-### Games running as administrator
+#### Games running as administrator
 
 Windows blocks input sent by a normal process into elevated windows. If a game
 runs as administrator, the script must run elevated too. In that case use Task

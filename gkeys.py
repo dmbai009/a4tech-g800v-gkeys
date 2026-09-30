@@ -15,8 +15,11 @@ from ctypes import wintypes
 
 import hid
 
-VID, PID = 0x09DA, 0x90C0
-VENDOR_PAGE = 0xFFA0
+VID = 0x09DA  # A4Tech; the G800V tested here is 09DA:90C0
+VENDOR_PAGE, VENDOR_USAGE = 0xFFA0, 0xA5
+
+MUTEX_NAME = "Local\\A4TechGKeys"
+STOP_EVENT_NAME = "Local\\A4TechGKeysStop"
 
 # Bit index (0 = b3&0x01, ... 7 = b3&0x80, 8 = b4&0x01, ... 15 = b4&0x80) -> G1..G16.
 BIT_NAMES = {i: f"G{i + 1}" for i in range(16)}
@@ -43,6 +46,13 @@ MAPPING = {
 
 # --- SendInput -------------------------------------------------------------
 user32 = ctypes.WinDLL("user32", use_last_error=True)
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel32.CreateMutexW.restype = kernel32.OpenMutexW.restype = wintypes.HANDLE
+kernel32.CreateEventW.restype = kernel32.OpenEventW.restype = wintypes.HANDLE
+kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+for _f in (kernel32.SetEvent, kernel32.ResetEvent, kernel32.CloseHandle):
+    _f.argtypes = [wintypes.HANDLE]
+ERROR_ALREADY_EXISTS, SYNCHRONIZE, EVENT_MODIFY_STATE = 183, 0x00100000, 0x0002
 INPUT_KEYBOARD, KEYEVENTF_KEYUP = 1, 0x2
 ULONG_PTR = ctypes.c_size_t
 
@@ -93,8 +103,9 @@ def send_keys(names, up):
 
 # --- main loop -------------------------------------------------------------
 def open_device():
-    for d in hid.enumerate(VID, PID):
-        if d["usage_page"] == VENDOR_PAGE:
+    # any A4Tech device exposing the G-key report; the PID may differ between batches
+    for d in hid.enumerate(VID, 0):
+        if d["usage_page"] == VENDOR_PAGE and d["usage"] == VENDOR_USAGE:
             h = hid.device()
             h.open_path(d["path"])
             return h
@@ -119,11 +130,15 @@ def apply(prev, state):
             send_keys(keys, up=not pressed)
 
 
-def run(h):
+def stop_requested(stop_event):
+    return kernel32.WaitForSingleObject(stop_event, 0) == 0  # WAIT_OBJECT_0
+
+
+def run(h, stop_event):
     prev = 0
     try:
-        while True:
-            data = h.read(64, 1000)
+        while not stop_requested(stop_event):
+            data = h.read(64, 500)
             # bytes 1-2 change whenever bindings are edited in the A4Tech app - ignore them
             if not data or len(data) < 5 or data[0] != 0x04:
                 continue
@@ -135,20 +150,51 @@ def run(h):
 
 
 def main():
-    while True:
+    """Runs until another process signals STOP_EVENT_NAME (or Ctrl+C)."""
+    kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        log("already running")
+        return
+    stop_event = kernel32.CreateEventW(None, True, False, STOP_EVENT_NAME)
+    kernel32.ResetEvent(stop_event)
+    while not stop_requested(stop_event):
         h = open_device()
         if not h:
             log("keyboard not found, waiting...")
-            time.sleep(3)
+            kernel32.WaitForSingleObject(stop_event, 3000)
             continue
         log("listening for G-keys. Ctrl+C to quit.")
         try:
-            run(h)
+            run(h, stop_event)
         except OSError:
             log("keyboard disconnected, reconnecting...")
             time.sleep(1)
         finally:
             h.close()
+
+
+def stop_running_instance(timeout=5.0):
+    """Asks a running main() to exit and waits for it. Returns True if none is left."""
+    ev = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, STOP_EVENT_NAME)
+    if ev:
+        kernel32.SetEvent(ev)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        m = kernel32.OpenMutexW(SYNCHRONIZE, False, MUTEX_NAME)
+        if not m:
+            break
+        kernel32.CloseHandle(m)
+        time.sleep(0.1)
+    if ev:
+        kernel32.CloseHandle(ev)
+    return not is_running()
+
+
+def is_running():
+    m = kernel32.OpenMutexW(SYNCHRONIZE, False, MUTEX_NAME)
+    if m:
+        kernel32.CloseHandle(m)
+    return bool(m)
 
 
 if __name__ == "__main__":
