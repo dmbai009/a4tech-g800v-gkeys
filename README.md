@@ -3,6 +3,9 @@
 Makes the G-keys of an **A4Tech X7 G800V** keyboard work as standalone keys on Windows,
 so they can be bound independently in games, OBS, Discord, AutoHotkey, etc.
 
+Prefer a smaller native build with no Python runtime? See the
+[Rust version](https://github.com/dmbai009/a4tech-g800v-gkeys-rs).
+
 Out of the box the G-keys only work by being bound (in the A4Tech app) to other
 keys or combinations. However, the keyboard also reports every G-key press on a
 hidden vendor-defined HID interface (usage page `0xFFA0`) as a bitmask. `gkeys.py`
